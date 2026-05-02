@@ -1,1 +1,424 @@
+# 📘 COMPLETE GUIDE: Unattended Windows Deployment Using ADK + Windows SIM
 
+---
+
+# 🧭 OVERVIEW
+
+This guide teaches how to build a **fully automated Windows installation media** using:
+
+* Windows ADK (Assessment and Deployment Kit)
+* Windows System Image Manager (SIM)
+* DISM (Deployment Image Servicing and Management)
+
+By the end, you will have:
+
+✔ Automated installation (no user interaction)
+✔ Automatic disk partitioning (UEFI + BIOS)
+✔ Preloaded drivers
+✔ Preconfigured system settings
+✔ Automatic user account creation
+
+---
+
+# 🧰 PART 1 — INSTALLATION OF REQUIRED TOOLS
+
+## 1.1 Install Windows ADK
+
+Download and install:
+
+* Windows ADK
+* Windows PE Add-on
+
+During installation, select:
+
+Deployment Tools
+Windows System Image Manager (SIM)
+
+---
+
+# 📁 PART 2 — PREPARE WORKING ENVIRONMENT
+
+Create a structured workspace:
+
+C:\WinLab
+├── ISO
+├── Mount
+├── Drivers
+├── Catalog
+└── Unattend\
+
+---
+
+## 2.1 Extract Windows ISO
+
+Mount or extract your Windows ISO into:
+
+C:\WinLab\ISO\
+
+You should see:
+
+sources
+boot
+efi
+setup.exe
+
+---
+
+# 🧱 PART 3 — CREATE CATALOG FILE (.CLG)
+
+## 3.1 Open Windows SIM
+
+Launch:
+Windows System Image Manager
+
+---
+
+## 3.2 Load Windows Image
+
+File → Select Windows Image
+
+Navigate to:
+
+C:\WinLab\ISO\sources\install.wim
+
+Select your desired edition (e.g., Windows 11 Pro).
+
+---
+
+## 3.3 Generate Catalog
+
+If prompted:
+
+"Create catalog file?" → YES
+
+This creates:
+
+install.clg
+
+⚠️ This step may take several minutes.
+
+---
+
+# 📄 PART 4 — CREATE ANSWER FILE (AUTOUNATTEND.XML)
+
+## 4.1 Create New File
+
+File → New Answer File
+
+---
+
+# ⚙️ CONFIGURATION PASSES EXPLAINED
+
+windowsPE → Pre-install (disk, language, setup)
+specialize → System configuration
+oobeSystem → User setup and first boot
+
+---
+
+# ⚙️ PART 5 — CONFIGURE windowsPE PASS
+
+## 5.1 Add Required Components
+
+Add to windowsPE:
+
+Microsoft-Windows-International-Core-WinPE
+Microsoft-Windows-Setup
+
+---
+
+## 5.2 Configure Language
+
+Set:
+
+InputLocale = en-US
+SystemLocale = en-US
+UILanguage = en-US
+UserLocale = en-US
+
+---
+
+## 5.3 Configure Disk (AUTO FORMAT)
+
+Right-click Microsoft-Windows-Setup → Add DiskConfiguration
+
+---
+
+### Disk Settings
+
+DiskID = 0
+WillWipeDisk = true
+
+---
+
+## 5.4 Create Partitions (UEFI - GPT)
+
+CreatePartitions:
+
+Order 1 → EFI → 100MB
+Order 2 → MSR → 16MB
+Order 3 → Primary → Extend = true
+
+---
+
+## 5.5 Modify Partitions
+
+Partition 1:
+Format = FAT32
+Label = System
+
+Partition 3:
+Format = NTFS
+Letter = C
+Label = Windows
+
+---
+
+## 5.6 Configure OS Installation Target
+
+ImageInstall → OSImage → InstallTo:
+
+DiskID = 0
+PartitionID = 3
+
+---
+
+## 5.7 Accept License
+
+UserData:
+
+AcceptEula = true
+FullName = Admin
+Organization = Lab
+
+---
+
+# 🧩 PART 6 — CONFIGURE specialize PASS
+
+## 6.1 Add Component
+
+Microsoft-Windows-Shell-Setup → specialize
+
+---
+
+## 6.2 Configure System
+
+ComputerName = AUTO-PC
+TimeZone = Romance Standard Time
+
+---
+
+# 👤 PART 7 — CONFIGURE oobeSystem PASS
+
+## 7.1 Add Component
+
+Microsoft-Windows-Shell-Setup → oobeSystem
+
+---
+
+## 7.2 Configure OOBE (Skip Setup Screens)
+
+HideEULAPage = true
+HideWirelessSetupInOOBE = true
+ProtectYourPC = 1
+NetworkLocation = Work
+
+---
+
+## 7.3 Create User Accounts
+
+UserAccounts → LocalAccounts → Add
+
+---
+
+### Admin User
+
+Name = admin
+Group = Administrators
+Password = Admin123!
+PlainText = true
+
+---
+
+### Standard User
+
+Name = user
+Group = Users
+Password = User123!
+PlainText = true
+
+---
+
+## 7.4 Configure Auto Logon
+
+Username = admin
+Enabled = true
+LogonCount = 1
+Password = Admin123!
+
+---
+
+# 💾 PART 8 — SAVE ANSWER FILE
+
+Save as:
+
+C:\WinLab\ISO\autounattend.xml
+
+---
+
+# ✅ PART 9 — VALIDATE CONFIGURATION
+
+In SIM:
+
+Tools → Validate Answer File
+
+Fix all errors before proceeding.
+
+---
+
+# 🔌 PART 10 — DRIVER INJECTION (DISM)
+
+## 10.1 Mount Image
+
+dism /Mount-Wim /WimFile:C:\WinLab\ISO\sources\install.wim /index:6 /MountDir:C:\WinLab\Mount
+
+---
+
+## 10.2 Inject Drivers
+
+dism /Image:C:\WinLab\Mount /Add-Driver /Driver:C:\WinLab\Drivers /Recurse
+
+---
+
+## 10.3 Commit Changes
+
+dism /Unmount-Wim /MountDir:C:\WinLab\Mount /Commit
+
+---
+
+# 💿 PART 11 — CREATE BOOTABLE USB
+
+## 11.1 Prepare USB
+
+diskpart
+
+list disk
+select disk X
+clean
+create partition primary
+format fs=fat32 quick
+active
+assign
+exit
+
+---
+
+## 11.2 Copy Installation Files
+
+xcopy C:\WinLab\ISO* X:\ /E /H
+
+---
+
+# 🧠 PART 12 — BIOS vs UEFI EXPLANATION
+
+## UEFI (Modern Systems)
+
+* Uses GPT partitioning
+* Requires EFI partition
+* Supports Secure Boot
+
+---
+
+## BIOS (Legacy Systems)
+
+* Uses MBR
+* Requires active primary partition
+* No EFI partition
+
+---
+
+## Teaching Tip
+
+Have students compare:
+
+UEFI layout:
+EFI + MSR + Primary
+
+BIOS layout:
+Single Primary (Active)
+
+---
+
+# 🧪 PART 13 — TESTING
+
+Always test before deployment:
+
+* VirtualBox
+* VMware
+* Hyper-V
+
+---
+
+# ⚠️ COMMON ERRORS
+
+Wrong configuration pass
+Missing DiskID
+Incorrect partition order
+Invalid XML structure
+Forgetting to validate
+Wrong WIM index
+Drivers not in .inf format
+
+---
+
+# 🚀 PART 14 — OPTIONAL ADVANCED FEATURES
+
+## Domain Join
+
+Component:
+Microsoft-Windows-UnattendedJoin
+
+---
+
+## Post-Install Script
+
+File:
+
+C:\Windows\Setup\Scripts\SetupComplete.cmd
+
+Example:
+
+@echo off
+net user admin /active:yes
+
+---
+
+## Inject Windows Updates
+
+dism /Image:C:\Mount /Add-Package /PackagePath:update.cab
+
+---
+
+# 🏁 FINAL RESULT
+
+You now have a deployment solution that:
+
+✔ Installs Windows automatically
+✔ Formats disks without input
+✔ Works on UEFI and BIOS systems
+✔ Includes drivers
+✔ Creates users automatically
+✔ Skips all setup screens
+
+---
+
+# 📚 SUGGESTED LAB EXERCISES
+
+1. Break the XML and debug it
+2. Create BIOS-only deployment
+3. Add domain join
+4. Add custom scripts
+5. Inject faulty driver and troubleshoot
+
+---
+
+END OF GUIDE
